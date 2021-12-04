@@ -271,30 +271,33 @@ test_params = {'Momentum': {'torch_cls': SGD,
                           'torch_params': {'lr': 0.5, 'betas': (0.9, 0.999), 'eps': 1e-08},
                           'params': {'learning_rate': 0.5, 'beta1': 0.9, 'beta2': 0.999, 'epsilon': 1e-8}}}
 
-def test_optimizer(optim_cls):
+def test_optimizer(optim_cls, num_steps=10):
                
     test_dict = test_params[ optim_cls.__name__]
     
     for ns in [opt_checker_1, opt_checker_2]:
         
         torch_params = [p.clone().detach().requires_grad_(True) for p in ns.params]
-        
         torch_opt = test_dict['torch_cls'](torch_params, **test_dict['torch_params'])
-        torch_opt.zero_grad()
-        
-        loss = ns.f(*torch_params)
-        loss.backward()
-        torch_opt.step()
+        for _ in range(num_steps):
+
+            torch_opt.zero_grad()
+
+            loss = ns.f(*torch_params)
+            loss.backward()
+            torch_opt.step()
         
         params = [p.clone().detach().requires_grad_(True) for p in ns.params]
-        
         opt = optim_cls(params, **test_dict['params'])
-        opt.zero_grad()
-    
-        loss = ns.f(*params)
-        loss.backward()
-        opt.step()
-        
+
+        for _ in range(num_steps):
+
+            opt.zero_grad()
+
+            loss = ns.f(*params)
+            loss.backward()
+            opt.step()
+
         for p, tp in zip(params, torch_params):
             assert torch.allclose(p, tp)
 
@@ -306,9 +309,11 @@ def test_droput(dropout_cls):
     x = torch.randn(10, 30)
     out = drop(x)
 
-    for row in out:
-        zeros_in_row = len(torch.where(row == 0.)[0]) 
-        assert zeros_in_row > 0 and zeros_in_row < len(row)
+    for row, orig_row in zip(out, x):
+        zeros_in_row = torch.where(row == 0.)[0]
+        non_zeros_in_row = torch.where(row != 0.)[0]
+        non_zeros_scaled = (row[non_zeros_in_row] == 2 * orig_row[non_zeros_in_row]).all()
+        assert len(zeros_in_row) > 0 and len(zeros_in_row) < len(row) and non_zeros_scaled
 
     drop_eval = dropout_cls(0.5)
     drop_eval.eval()
